@@ -128,6 +128,5 @@ namespace image {
 		std::vector<BGRA> color_palette;
 		std::vector<uint8_t> pixel_data;
 	};
-
 }
 #endif
