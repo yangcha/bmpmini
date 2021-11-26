@@ -78,7 +78,7 @@ namespace image {
 			}
 			istrm.read(reinterpret_cast<char*>(&header), sizeof(BMPHeader));
 
-			if (header.compression_method != 0) {
+			if (header.compression_method != 0 || header.colors_in_palette != 0) {
 				throw std::invalid_argument("Only no compression is supported currently");
 			}
 			
