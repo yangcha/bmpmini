@@ -64,7 +64,7 @@ namespace image {
 				throw std::runtime_error("Cannot open the input file: " + filename);
 			}
 
-			istrm.read(reinterpret_cast<char*>(&header), sizeof BMPHeader);
+			istrm.read(reinterpret_cast<char*>(&header), sizeof(BMPHeader));
 			istrm.seekg(header.offset_data, std::ios::beg);
 
 			int row_size = ((header.width * header.bit_per_pixel + 31) / 32) * 4;
@@ -96,7 +96,7 @@ namespace image {
 				throw std::runtime_error("Cannot open the output file: " + filename);
 			}
 			ostrm.write((const char*)&header, sizeof header);
-			ostrm.write((const char*)color_palette.data(), color_palette.size() * sizeof BGRA);
+			ostrm.write((const char*)color_palette.data(), color_palette.size() * sizeof(BGRA));
 			ostrm.write((const char*)image_data.data(), image_data.size());
 		}
 
@@ -112,7 +112,7 @@ namespace image {
 					color_palette.emplace_back(i, i, i, 0);
 				}
 			}
-			header.offset_data = sizeof header + color_palette.size() * sizeof BGRA;
+			header.offset_data = sizeof(header) + color_palette.size() * sizeof(BGRA);
 			header.file_size = header.offset_data + header.image_size;
 			pixel_data.resize(rawImage.width * rawImage.height * rawImage.channels);
 			std::copy(rawImage.data, rawImage.data + pixel_data.size(), pixel_data.begin());
