@@ -63,19 +63,24 @@ namespace image {
 			if (!istrm) {
 				throw std::runtime_error("Cannot open the input file: " + filename);
 			}
-
 			istrm.read(reinterpret_cast<char*>(&header), sizeof(BMPHeader));
+			
+			color_palette.clear();
+			if (header.bit_per_pixel == 8) {
+				color_palette.resize(256);
+				istrm.read(reinterpret_cast<char*>(&color_palette), color_palette.size() * sizeof(BGRA));
+			}
+			
 			istrm.seekg(header.offset_data, std::ios::beg);
-
-			int row_size = ((header.width * header.bit_per_pixel + 31) / 32) * 4;
-			int image_size = header.height * row_size;
+			int padded_row_size = ((header.width * header.bit_per_pixel + 31) / 32) * 4;
+			int image_size = header.height * padded_row_size;
 			std::vector< uint8_t> data(image_size);
 			istrm.read(reinterpret_cast<char*>(data.data()), data.size());
 
 			pixel_data.reserve((header.width * header.height * header.bit_per_pixel) / 8);
 			for (int i = 0; i < header.height; i++) {
 				auto k = header.height - 1 - i;
-				auto ptr = reinterpret_cast<uint8_t*>(data.data()) + k * row_size;
+				auto ptr = reinterpret_cast<uint8_t*>(data.data()) + k * padded_row_size;
 				pixel_data.insert(pixel_data.end(), ptr, ptr+ (header.width* header.bit_per_pixel)/8);
 			}
 		}
