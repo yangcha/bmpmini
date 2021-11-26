@@ -30,6 +30,11 @@ namespace image {
 	};
 #pragma pack(pop)
 
+	struct BGR {
+		uint8_t b{ 0 };
+		uint8_t g{ 0 };
+		uint8_t r{ 0 };
+	};
 
 	struct BGRA {
 		BGRA() = default;
@@ -53,13 +58,6 @@ namespace image {
 	class BMPMini
 	{
 	public:
-		enum class CompressionMethod {
-			BI_RGB,		// no compression
-			BI_RLE8,	// RLE 8-bit/pixel
-			BI_RLE4,	// RLE 4-bit/pixel
-			BI_BITFIELDS	// RGB bit field masks
-		};
-
 		void read(const std::string& filename) {
 			std::ifstream istrm(filename, std::ios::binary);
 			if (!istrm) {
@@ -82,62 +80,52 @@ namespace image {
 			}
 		}
 
-		void write(int width, int height, int channels, const uint8_t* data,
-			const std::string& filename) {
-			header.width = width;
-			header.height = height;
-			header.bit_per_pixel = channels * 8;
-			int row_size = ((header.width * header.bit_per_pixel + 31) / 32) * 4;
-			header.image_size = header.height * row_size;
-			header.file_size = header.offset_data + header.image_size;
-
+		void write(const std::string& filename) {
+			// upside down and padding
+			int padded_row_size = ((header.width * header.bit_per_pixel + 31) / 32) * 4;
 			std::vector<uint8_t> image_data(header.image_size);
+			int channels = header.bit_per_pixel / 8;
 			for (int i = 0; i < header.height; i++) {
 				auto k = header.height - 1 - i;
-				auto ptr = &data[k * width * channels];
-				std::copy(ptr, ptr + width * channels, &image_data[i*row_size]);
+				auto ptr = &pixel_data[k * header.width * channels];
+				std::copy(ptr, ptr + header.width * channels, &image_data[i*padded_row_size]);
 			}
 
 			std::ofstream ostrm{ filename, std::ios_base::binary };
-			ostrm.write((const char*)&header, sizeof(header));
+			if (!ostrm) {
+				throw std::runtime_error("Cannot open the output file: " + filename);
+			}
+			ostrm.write((const char*)&header, sizeof header);
+			ostrm.write((const char*)color_palette.data(), color_palette.size() * sizeof BGRA);
 			ostrm.write((const char*)image_data.data(), image_data.size());
 		}
 
-		void write8(ImageView raw_image,
-			const std::string& filename) {
-			header.width = raw_image.width;
-			header.height = raw_image.height;
-			header.bit_per_pixel = 8;
-			int row_size = ((header.width * header.bit_per_pixel + 31) / 32) * 4;
-			header.image_size = header.height * row_size;
-			header.colors_in_palette = 0;
-			std::vector<BGRA> color_palette;
-			for (unsigned i = 0; i < 256; i++) {
-				color_palette.emplace_back(i, i, i, 0);
-			}
-			header.file_size = header.offset_data + color_palette.size() + header.image_size;
-			header.offset_data = 54+color_palette.size();
-			std::vector<uint8_t> image_data(header.image_size);
-			for (int i = 0; i < header.height; i++) {
-				auto k = header.height - 1 - i;
-				auto ptr = &raw_image.data[k * raw_image.width * raw_image.channels];
-				for (int j = 0; j < raw_image.width; j++) {
-					image_data[i * row_size + j] = ptr[j * raw_image.channels];
+		void write(const ImageView rawImage, const std::string& filename) {
+			header.width = rawImage.width;
+			header.height = rawImage.height;
+			header.bit_per_pixel = rawImage.channels * 8;
+			int padded_row_size = ((header.width * header.bit_per_pixel + 31) / 32) * 4;
+			header.image_size = header.height * padded_row_size;
+			color_palette.clear();
+			if (header.bit_per_pixel == 8) {
+				for (unsigned i = 0; i < 256; i++) {
+					color_palette.emplace_back(i, i, i, 0);
 				}
 			}
-
-			std::ofstream ostrm{ filename, std::ios_base::binary };
-			ostrm.write((const char*)&header, sizeof(header));
-			ostrm.write((const char*)color_palette.data(), color_palette.size()*4);
-			ostrm.write((const char*)image_data.data(), image_data.size());
+			header.offset_data = sizeof header + color_palette.size() * sizeof BGRA;
+			header.file_size = header.offset_data + header.image_size;
+			pixel_data.resize(rawImage.width * rawImage.height * rawImage.channels);
+			std::copy(rawImage.data, rawImage.data + pixel_data.size(), pixel_data.begin());
+			write(filename);
 		}
 
-		void write(const std::string& filename) {
-			write8({ header.width, header.height, header.bit_per_pixel / 8, pixel_data.data() }, filename);
+		ImageView get() {
+			return { header.width, header.height, header.bit_per_pixel /8, pixel_data.data() };
 		}
 
 	private:
 		BMPHeader header;
+		std::vector<BGRA> color_palette;
 		std::vector<uint8_t> pixel_data;
 	};
 
