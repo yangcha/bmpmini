@@ -74,9 +74,13 @@ namespace image {
 		void read(const std::string& filename) {
 			std::ifstream istrm(filename, std::ios::binary);
 			if (!istrm) {
-				throw std::runtime_error("Cannot open the input file: " + filename);
+				throw std::ios::failure("Cannot open the input file: " + filename);
 			}
 			istrm.read(reinterpret_cast<char*>(&header), sizeof(BMPHeader));
+
+			if (header.compression_method != 0) {
+				throw std::invalid_argument("Only no compression is supported currently");
+			}
 			
 			color_palette.clear();
 			if (header.bit_per_pixel == 8) {
