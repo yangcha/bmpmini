@@ -15,7 +15,6 @@ modification, are permitted provided that the following conditions are met:
    and/or other materials provided with the distribution.
 */
 #include <vector>
-#include <array>
 #include <fstream>
 
 namespace image {
@@ -43,22 +42,6 @@ namespace image {
 	};
 #pragma pack(pop)
 
-	struct BGR {
-		uint8_t b{ 0 };
-		uint8_t g{ 0 };
-		uint8_t r{ 0 };
-	};
-
-	struct BGRA {
-		BGRA() = default;
-		BGRA(uint8_t _b, uint8_t _g, uint8_t _r, uint8_t _a) :
-			b{ _b }, g{ _g }, r{ _r }, a{ _a } {}
-		uint8_t b{ 0 };
-		uint8_t g{ 0 };
-		uint8_t r{ 0 };
-		uint8_t a{ 0 };
-	};
-
 	struct ImageView {
 		ImageView(int w, int h, int c, uint8_t* d) :
 			width{ w }, height{ h }, channels{ c }, data{ d } {}
@@ -66,6 +49,14 @@ namespace image {
 		int height{ 0 };
 		int channels{ 0 };
 		uint8_t* data{ nullptr };
+	};
+
+	struct ColorPalette {
+		constexpr ColorPalette() : table{ 0 } {
+			for (auto i = 1; i < 256; i++)
+				table[i] = table[i - 1] + 0x00010101u;
+		}
+		uint32_t table[256];
 	};
 
 	class BMPMini
@@ -82,14 +73,8 @@ namespace image {
 				throw std::invalid_argument("Only no compression is supported currently");
 			}
 			
-			color_palette.clear();
-			if (header.bit_per_pixel == 8) {
-				color_palette.resize(256);
-				istrm.read(reinterpret_cast<char*>(&color_palette), color_palette.size() * sizeof(BGRA));
-			}
-			
 			istrm.seekg(header.offset_data, std::ios::beg);
-			int padded_row_size = ((header.width * header.bit_per_pixel + 31) / 32) * 4;
+			int padded_row_size = paddedRowSize();
 			int image_size = header.height * padded_row_size;
 			std::vector< uint8_t> data(image_size);
 			istrm.read(reinterpret_cast<char*>(data.data()), data.size());
@@ -104,7 +89,7 @@ namespace image {
 
 		void write(const std::string& filename) {
 			// upside down and padding
-			int padded_row_size = ((header.width * header.bit_per_pixel + 31) / 32) * 4;
+			int padded_row_size = paddedRowSize();
 			std::vector<uint8_t> image_data(header.image_size);
 			int channels = header.bit_per_pixel / 8;
 			for (int i = 0; i < header.height; i++) {
@@ -118,7 +103,10 @@ namespace image {
 				throw std::runtime_error("Cannot open the output file: " + filename);
 			}
 			ostrm.write((const char*)&header, sizeof header);
-			ostrm.write((const char*)color_palette.data(), color_palette.size() * sizeof(BGRA));
+			if (is8bit()) {
+				constexpr ColorPalette color_palette;
+				ostrm.write((const char*)color_palette.table, sizeof(ColorPalette));
+			}
 			ostrm.write((const char*)image_data.data(), image_data.size());
 		}
 
@@ -126,15 +114,9 @@ namespace image {
 			header.width = rawImage.width;
 			header.height = rawImage.height;
 			header.bit_per_pixel = rawImage.channels * 8;
-			int padded_row_size = ((header.width * header.bit_per_pixel + 31) / 32) * 4;
+			int padded_row_size = paddedRowSize();
 			header.image_size = header.height * padded_row_size;
-			color_palette.clear();
-			if (header.bit_per_pixel == 8) {
-				for (unsigned i = 0; i < 256; i++) {
-					color_palette.emplace_back(i, i, i, 0);
-				}
-			}
-			header.offset_data = sizeof(header) + color_palette.size() * sizeof(BGRA);
+			header.offset_data = sizeof(header) + sizeof(ColorPalette);
 			header.file_size = header.offset_data + header.image_size;
 			pixel_data.resize(rawImage.width * rawImage.height * rawImage.channels);
 			std::copy(rawImage.data, rawImage.data + pixel_data.size(), pixel_data.begin());
@@ -146,8 +128,9 @@ namespace image {
 		}
 
 	private:
+		bool is8bit() const { return header.bit_per_pixel == 8; }
+		int paddedRowSize() const { return ((header.width * header.bit_per_pixel + 31) / 32) * 4; }
 		BMPHeader header;
-		std::vector<BGRA> color_palette;
 		std::vector<uint8_t> pixel_data;
 	};
 }
